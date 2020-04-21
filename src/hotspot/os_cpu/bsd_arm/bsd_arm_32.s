@@ -76,7 +76,7 @@ _Copy_arrayof_conjoint_bytes:
         #                                       size_t count)
 _Copy_disjoint_words:
         stmdb    sp!, {r3 - r9, ip}
- 
+
         cmp     r2, #0
         beq     disjoint_words_finish
 

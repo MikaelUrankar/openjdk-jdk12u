@@ -303,6 +303,7 @@ JNIEXPORT jbyteArray JNICALL Java_sun_jvm_hotspot_debugger_bsd_BsdDebuggerLocal_
   return (err == PS_OK)? array : 0;
 }
 
+#if defined(i386) || defined(amd64) || defined(sparc) || defined(sparcv9) | defined(ppc64) || defined(ppc64le) || defined(aarch64)
 JNIEXPORT jlongArray JNICALL Java_sun_jvm_hotspot_debugger_bsd_BsdDebuggerLocal_getThreadIntegerRegisterSet0
   (JNIEnv *env, jobject this_obj, jint lwp_id) {
 
@@ -486,3 +487,4 @@ JNIEXPORT jlongArray JNICALL Java_sun_jvm_hotspot_debugger_bsd_BsdDebuggerLocal_
   (*env)->ReleaseLongArrayElements(env, array, regs, JNI_COMMIT);
   return array;
 }
+#endif

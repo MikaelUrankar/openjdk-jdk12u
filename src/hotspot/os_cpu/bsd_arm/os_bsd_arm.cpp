@@ -80,15 +80,6 @@ char* os::non_memory_address_word() {
   return (char*) -1;
 }
 
-#ifdef AARCH64
-
-#define arm_pc pc
-#define arm_sp sp
-#define arm_fp regs[29]
-#define arm_r0 regs[0]
-#define ARM_REGS_IN_CONTEXT  31
-
-#else
 
 #define arm_pc __gregs[15]
 #define arm_sp __gregs[13]
@@ -98,7 +89,6 @@ char* os::non_memory_address_word() {
 
 #define ARM_REGS_IN_CONTEXT  16
 
-#endif // AARCH64
 
 address os::Bsd::ucontext_get_pc(const ucontext_t* uc) {
   return (address)uc->uc_mcontext.arm_pc;
@@ -239,13 +229,11 @@ NOINLINE frame os::current_frame() {
 #endif
 }
 
-#ifndef AARCH64
 extern "C" address check_vfp_fault_instr;
 extern "C" address check_vfp3_32_fault_instr;
 
 address check_vfp_fault_instr = NULL;
 address check_vfp3_32_fault_instr = NULL;
-#endif // !AARCH64
 extern "C" address check_simd_fault_instr;
 address check_simd_fault_instr = NULL;
 
@@ -265,8 +253,8 @@ extern "C" int JVM_handle_bsd_signal(int sig, siginfo_t* info,
 
   if (sig == SIGILL &&
       ((info->si_addr == (caddr_t)check_simd_fault_instr)
-       NOT_AARCH64(|| info->si_addr == (caddr_t)check_vfp_fault_instr)
-       NOT_AARCH64(|| info->si_addr == (caddr_t)check_vfp3_32_fault_instr))) {
+       || info->si_addr == (caddr_t)check_vfp_fault_instr
+       || info->si_addr == (caddr_t)check_vfp3_32_fault_instr)) {
     // skip faulty instruction + instruction that sets return value to
     // success and set return value to failure.
     os::Bsd::ucontext_set_pc(uc, (address)info->si_addr + 8);
@@ -364,7 +352,8 @@ extern "C" int JVM_handle_bsd_signal(int sig, siginfo_t* info,
         if (nm != NULL && nm->has_unsafe_access()) {
           unsafe_access = true;
         }
-      } else if (sig == SIGSEGV && !MacroAssembler::needs_explicit_null_check((intptr_t)info->si_addr)) {
+      } else if (sig == SIGSEGV &&
+                 MacroAssembler::uses_implicit_null_check(info->si_addr)) {
           // Determination of interpreter/vtable stub/compiled code null exception
           CodeBlob* cb = CodeCache::find_blob_unsafe(pc);
           if (cb != NULL) {
@@ -386,16 +375,6 @@ extern "C" int JVM_handle_bsd_signal(int sig, siginfo_t* info,
       if (addr != (address)-1) {
         stub = addr;
       }
-    }
-
-    // Check to see if we caught the safepoint code in the
-    // process of write protecting the memory serialization page.
-    // It write enables the page immediately after protecting it
-    // so we can just return to retry the write.
-    if (sig == SIGSEGV && os::is_memory_serialize_page(thread, (address) info->si_addr)) {
-      // Block current thread until the memory serialize page permission restored.
-      os::block_on_serialize_page_trap();
-      return true;
     }
   }
 
@@ -468,9 +447,6 @@ void os::Bsd::init_thread_fpu_state(void) {
 }
 
 void os::setup_fpu() {
-#ifdef AARCH64
-  __asm__ volatile ("msr fpcr, xzr");
-#else
 #if !defined(__SOFTFP__) && defined(__VFP_FP__)
   // Turn on IEEE-754 compliant VFP mode
   __asm__ volatile (
@@ -479,7 +455,6 @@ void os::setup_fpu() {
     : /* no output */ : /* no input */ : "r0"
   );
 #endif
-#endif // AARCH64
 }
 
 bool os::is_allocatable(size_t bytes) {
@@ -515,14 +490,8 @@ void os::print_context(outputStream *st, const void *context) {
     st->print_cr("  %-3s = " INTPTR_FORMAT, as_Register(r)->name(), reg_area[r]);
   }
 #define U64_FORMAT "0x%016llx"
-#ifdef AARCH64
-  st->print_cr("  %-3s = " U64_FORMAT, "sp", uc->uc_mcontext.sp);
-  st->print_cr("  %-3s = " U64_FORMAT, "pc", uc->uc_mcontext.pc);
-  st->print_cr("  %-3s = " U64_FORMAT, "pstate", uc->uc_mcontext.pstate);
-#else
   // now print flag register
   st->print_cr("  %-4s = 0x%08x", "cpsr",uc->uc_mcontext.arm_cpsr);
-#endif
   st->cr();
 
   intptr_t *sp = (intptr_t *)os::Bsd::ucontext_get_sp(uc);
@@ -551,16 +520,10 @@ void os::print_register_info(outputStream *st, const void *context) {
     print_location(st, reg_area[r]);
     st->cr();
   }
-#ifdef AARCH64
-  st->print_cr("  %-3s = " U64_FORMAT, "pc", uc->uc_mcontext.pc);
-  print_location(st, uc->uc_mcontext.pc);
-  st->cr();
-#endif
   st->cr();
 }
 
 
-#ifndef AARCH64
 
 typedef int64_t cmpxchg_long_func_t(int64_t, int64_t, volatile int64_t*);
 
@@ -670,7 +633,6 @@ int32_t os::atomic_cmpxchg_bootstrap(int32_t compare_value, int32_t exchange_val
   return old_value;
 }
 
-#endif // !AARCH64
 
 #ifndef PRODUCT
 void os::verify_stack_alignment() {
@@ -681,4 +643,3 @@ int os::extra_bang_size_in_bytes() {
   // ARM does not require an additional stack bang.
   return 0;
 }
-
